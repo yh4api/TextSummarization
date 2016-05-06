@@ -1,0 +1,9 @@
+#CLASSPATH="classes:lib/colt.jar:lib/lingpipe-3.4.0.jar:lib/MinCutSeg.jar:lib/mtj.jar:lib/options.jar:lib/log4j-1.2.14.jar"
+
+CLASSPATH="/data2/opt/sharedLib/sharedLibSummarization/python/classes:/data2/opt/sharedLib/sharedLibSummarization/python/lib/colt.jar:/data2/opt/sharedLib/sharedLibSummarization/python/lib/lingpipe-3.4.0.jar:/data2/opt/sharedLib/sharedLibSummarization/python/lib/MinCutSeg.jar:/data2/opt/sharedLib/sharedLibSummarization/python/lib/mtj.jar:/data2/opt/sharedLib/sharedLibSummarization/python/lib/options.jar:/data2/opt/sharedLib/sharedLibSummarization/python/lib/log4j-1.2.14.jar:/data2/opt/sharedLib/sharedLibSummarization/python/lib/options.jar"
+
+#CLASSPATH="classes;lib/colt.jar;lib/lingpipe-3.4.0.jar;lib/MinCutSeg.jar;lib/mtj.jar;lib/options.jar;lib/log4j-1.2.14.jar;lib/options.jar"
+#java -cp ${CLASSPATH} edu.mit.nlp.segmenter.SegTester -config $1 -debug
+#java -cp ${CLASSPATH} edu.mit.nlp.segmenter.SegTester -config $1 -num-segs 10
+
+java -cp ${CLASSPATH} edu.mit.nlp.segmenter.SegTester -config /data2/opt/sharedLib/sharedLibSummarization/python/dp.config

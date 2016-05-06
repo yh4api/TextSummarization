@@ -1,0 +1,31 @@
+#
+# Seg [-N -n NUMBER-OF-SEGMENTS -p STEMMER] < textfile > segged-textfile
+# author: yhlin; origin file: Seg
+# date: '150617
+
+n=-1
+withNum=""
+#tmpfile=C:/tmp/Seg.`whoami`.`uname -n`.$$
+#tmpfile=/tmp/Seg.$1.$$
+tmpfile=/tmp/Seg.$1
+segfile=$tmpfile.seg
+textfile=$tmpfile.txt
+#set mydir = $HOME/bayesseg/baselines/textseg-1.211
+mydir=$PWD
+stemmer=cat
+function cleanUP {
+	rm -f $segfile $textfile
+}
+
+trap "cleanUP;exit" SIGHUP SIGINT SIGTERM SIGQUIT
+cat>$textfile
+if [ $n -eq -1 ] 
+then
+    cat $textfile | $stemmer | $mydir/prep-seg | $mydir/vsegLinux > $segfile
+else
+    cat $textfile | $stemmer | $mydir/prep-seg | $mydir/seg -maxNumSegs $n | tail -1 > $segfile
+fi
+echo $segfile $textfile
+#$mydir/seg-comb $withNum $segfile $textfile
+
+#cleanUP
