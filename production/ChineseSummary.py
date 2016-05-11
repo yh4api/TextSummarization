@@ -1,13 +1,14 @@
 # -*- coding:utf-8 -*-
 # process : 分句(標點符號)-> 分詞(jieba) -> segmentation(vseg) -> sum_ch.py (還要n-gram嗎?)
-# example :  python testChineseSummary.py < news4.txt
-# version '150812
+# usage : result = summaryToDBCH(text) 
+# version '160506 return result in json [{sentence, sentence_pos, sentence_ranking}]
 import sys, os, re
 import subprocess
 import jieba
 from collections import defaultdict, namedtuple
 import operator
 import random
+import json
 
 SEGMENT_PATH = "."
 
@@ -83,21 +84,15 @@ def calculateCHSentenceRating(text, origText, inputType, NE = 0, ABBR = 0, CIT =
 		
 	(sentenceKeywordList, phraseScore) = calculate_CHphrases_scores_TF(sentenceList, stopwordList)
 	sentenceRating = generate_CHsentences_rating(sentenceKeywordList, phraseScore)
-	rate = lambda s : sentenceRating[s]
-	SentenceInfo = namedtuple("SentenceInfo", ("sentence", "order", "rating",))
-	infos = (SentenceInfo(s, o, rate(s)) for o, s in enumerate(sentenceList))
 	
-	infos = sorted(infos, key=operator.attrgetter("rating"), reverse=True)
-	newSentences = ""
-	for i in infos:
-		#newSentences += i.sentence.replace(" ", "") #this is not working if the text contains both English(or other languages split by space) and Chinese, which has no spaces between
-		newSentences += origText[i.order].encode("utf-8")
-		newSentences += "!@#"
-		newSentences += str(i.order).zfill(3)
-		newSentences += "\n"
-	return newSentences
+	rate = lambda s : sentenceRating[s]
+	newSentences = [{"sentence":origText[o].encode("utf-8"), "position":o, "ranking":rate(s)} for o, s in enumerate(sentenceList)]
+	#newSentences = [{"sentence":s, "position":o, "ranking":rate(s)} for o, s in enumerate(sentenceList)] this fails if the text contains both English and Chinese, whose delimiter is not a space.
+		
+	return json.JSONEncoder().encode(newSentences)
+	
 
-def getSortedSentencesCH(text, threshold=1):#threshold value range is from 1~100
+def noGetSortedSentencesCH(text, threshold=1):#threshold value range is from 1~100
 	sentenceOrder = {}
 	sentenceList = text.split("\n")
 	
@@ -126,7 +121,7 @@ def getSortedSentencesCH(text, threshold=1):#threshold value range is from 1~100
 
 	return "\n\n".join(newSentenceList)
 
-def splitSentences(text):
+def toSplitSentences(text):
 	#print text
 	sentences = re.split(u'([。；！？])', text)
 	return sentences
@@ -221,7 +216,7 @@ def segmentBayesseg(filename):
 
 
 def getTokenizedText(text):
-	sentences = splitSentences(text)
+	sentences = toSplitSentences(text)
 	newTkSentences = []
 	newSentences = []
 
@@ -272,8 +267,4 @@ def summaryToDBCH(text):
 	return calculateCHSentenceRating(segGroup, origSegGroup, None)
 
 if __name__=="__main__":
-	text = u"警方調查，就讀台灣科技大學四年級的鄧姓學生，昨日上午與2名男同學、1名女同學搭乘公車到烏來區啦卡路旁的「桶後溪」溯溪戲水。中午12時許，鄧男與女同學相約一起游泳至對岸，女同學游至對岸時，卻發現鄧男在水面上載浮載沉，其餘同學見狀連忙報警處理。第四救災救護大隊長鍾世銘表示，夏日即將來臨，民眾戲水不該到危險水域，進入水域時應遵守警告標誌及救生人員勸導，不要著長褲下水，更不可從事跳水、水中嬉鬧等危險行為，尤其一般野溪看似平靜，其實水下多半潛藏暗流，稍有不慎就容易發生意外。43歲姜美菊與96歲丈夫任瑞麟，26年前因緣際會在大陸廣州相識相戀，姜不顧家人反對這段「爺孫戀」，隻身飛來台灣與任共組家庭16年，丈夫長年身體不好如今又失智，姜以微薄薪水買二手車，載他求醫、旅行，因此獲頒模範母親。姜美菊等14名外配嫁來台灣多年，悉心照顧年邁丈夫，協助維持家計，獲桃園市外籍配偶協會與桃園市榮服處，頒發模範母親，其中不少人提起艱困過往眼眶泛紅，雖然目前生活不富裕，她們知足常樂，更將台灣視為第二故鄉。姜美菊26年前就讀廣州中山大學時，在飯店打工擔任收銀人員，與赴陸探親、下榻飯店的任瑞麟巧遇相識，由於都是湖南同鄉，2人彼此互留地址，之後的10年來，雙方百封書信往來，彼此鼓勵上進、保重身體，逐漸燃起愛苗。任瑞麟1958年軍階上尉軍官退伍，早年娶妻生子，但在1980年離婚，目前靠著1萬4000元的榮民補助救養金過活，雖不富裕，卻常自掏腰包，帶已故同袍的骨灰赴陸落葉歸根，這種善良，以及在信中表露出的一手好書法，都讓姜美菊傾心。"
-	text = u"美國安德森治癌中心腫瘤生物學博士顏榮郎今天指出，防癌養生不能忽視糖、紅肉以及麩醯胺酸等3大促癌因子的危險性。顏榮郎在康健雜誌舉辦的「抗癌新未來」論壇指出，癌細胞與脂肪細胞結構近似，最大的不同在於癌細胞當中多了發炎細胞，癌症其實是一種發炎疾病。顏榮郎將糖列為癌細胞三大「補品」之一，理由在於攝取過多葡萄糖會使血糖快速上升，刺激胰島素增加，類胰島生長因子跟著增加，刺激癌細胞生長，甚至讓癌細胞對化療反應變差，還有糖化蛋白的風險，加重發炎，偏偏現代人常忽略糖分對健康潛藏的危害。他建議，癌症病人少吃糖，減少白米，改吃糙米，至於紅肉與動物性油脂吃多了，會增加血液中的低密度脂蛋白膽固醇（LDL），也就是俗稱的「壞膽固醇」，當壞膽固醇被氧化，被巨噬細胞吞噬的過程就會分泌發炎激素。癌症病友化療期間常吃麩醯胺酸，被當成口腔潰瘍用藥，顏榮郎認為，麩醯胺酸和葡萄糖都是癌細胞喜歡的物質，不是不能吃，一點點就好，不要一天吃二、三十顆，以免在分解過程間接釋放發炎酵素，反而提供癌細胞生長材料。警、消獲報抵達，消防人員利用魚雷浮標救回對岸的女同學，浮潛下水將鄧男救起，當時他已無呼吸心跳，送新店耕莘醫院急救20分鐘，已恢復生命跡象，但到了晚間症狀惡化，宣告不治。"
-	tmp_out = summaryToDBCH(text)
-	print tmp_out
-	#print getSortedSentencesCH(tmp_out, 1)
+	summaryToDBCH("")
