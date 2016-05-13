@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 # process : 分句(標點符號)-> 分詞(jieba) -> segmentation(vseg) -> sum_ch.py (還要n-gram嗎?)
 # usage : result = summaryToDBCH(text) 
-# version '160506 return result in json [{sentence, sentence_pos, sentence_ranking}]
+# version '160513 return result in json [{sentence, sentence_pos, sentence_ranking}], sorted by ranking
 import sys, os, re
 import subprocess
 import jieba
@@ -89,8 +89,8 @@ def calculateCHSentenceRating(text, origText, inputType, NE = 0, ABBR = 0, CIT =
 	newSentences = [{"sentence":origText[o].encode("utf-8"), "position":o, "ranking":rate(s)} for o, s in enumerate(sentenceList)]
 	#newSentences = [{"sentence":s, "position":o, "ranking":rate(s)} for o, s in enumerate(sentenceList)] this fails if the text contains both English and Chinese, whose delimiter is not a space.
 		
-	return json.JSONEncoder().encode(newSentences)
-	
+	#return json.JSONEncoder().encode(newSentences)
+	return json.JSONEncoder().encode(sorted(newSentences, key=operator.itemgetter("ranking")))
 
 def noGetSortedSentencesCH(text, threshold=1):#threshold value range is from 1~100
 	sentenceOrder = {}

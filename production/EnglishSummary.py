@@ -1,6 +1,6 @@
 #TF weighted model Summarization for English text; no special feature or text structure are taken into consideration.
-#usage : result = summaryToDBCH(text) 
-
+#usage : result = summaryToDB(text) 
+#'160513 return result in json [{sentence, sentence_pos, sentence_ranking}], sorted by ranking 
 import sys, re, os
 import subprocess
 import random
@@ -15,7 +15,7 @@ from math import sqrt
 import json
 
 
-
+import operator
 
 tokenizers = nltk.data.load("tokenizers/punkt/english.pickle")
 
@@ -104,7 +104,7 @@ def calculateSentenceRating(text, inputType, NE=1, ABBR=1, CIT=1):
 	
 	newSentences = [{"sentence":s, "position":o, "ranking":rate(s)} for o, s in enumerate(sentenceList)]
 		
-	return json.JSONEncoder().encode(newSentences)
+	return json.JSONEncoder().encode(sorted(newSentences, key=operator.itemgetter("ranking")))
 
 
 
@@ -129,7 +129,8 @@ def normalSummary(text):
 		boundary = eval(ps.communicate()[0])
 		#print boundary
 	except:
-		return calculateSentenceRating(sentences, "other")
+			os.remove(filename) 
+			return calculateSentenceRating(sentences, "other")
 	bStart = 0
 	newText = []
 	for b in boundary:
