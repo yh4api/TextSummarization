@@ -1,6 +1,6 @@
-#TF weighted model Summarization for English text; no special feature or text structure are taken into consideration.
-#usage : result = summaryToDB(text) 
-#'160513 return result in json [{sentence, sentence_pos, sentence_ranking}], sorted by ranking 
+#TF weighted model Summarization for English text; no special feature or text structure are taken into consideration. 
+#usage : result = summaryToDB(textJsonString) 
+# version: '160516 MultiUser/MultiPost, input is json string [{id:1, content:1}, {id:2, content:2}], post id has to remembered and kept in the structure
 import sys, re, os
 import subprocess
 import random
@@ -31,6 +31,7 @@ comp_url = re.compile(exp_url)
 exp_header = r' *(et al\. ?:.* \d+|\d+ .* [\w ]+ et al\. ?:)'
 comp_header = re.compile(exp_header, re.I)
 SEGMENT_PATH="."
+TMP="/tmp/"
 
 def load_stop_words(stop_word_file):
 	"""
@@ -90,7 +91,7 @@ def generate_sentences_rating(sentenceKeywordList, phraseScore, NE = 1, ABBR = 1
 	#	print s, k	
 	return sentenceRating				
 
-def calculateSentenceRating(text, inputType, NE=1, ABBR=1, CIT=1):
+def calculateSentenceRating(text, textId, inputType, NE=1, ABBR=1, CIT=1):
 	
 	#text is a sentence array
 	sentenceList = text
@@ -103,49 +104,78 @@ def calculateSentenceRating(text, inputType, NE=1, ABBR=1, CIT=1):
 	rate = lambda s : sentenceRating[s]
 	
 	#newSentences = [{"sentence":s, "position":o, "ranking":rate(s)} for o, s in enumerate(sentenceList)]
-	newSentences = [{"sentence":s.decode("unicode-escape"), "position":o, "ranking":rate(s)} for o, s in enumerate(sentenceList)] #if the sentence contains some unicode like seq, it can be understood.
+	newSentences = [{"sentence":s.decode("unicode-escape"), "position":o, "ranking":rate(s), "id": textId[o]} for o, s in enumerate(sentenceList)] #if the sentence contains some unicode like seq, it can be understood.
 		
 	return json.JSONEncoder().encode(sorted(newSentences, key=operator.itemgetter("ranking"), reverse=True))
 
 
 
-def normalSummary(text):
+def normalSummary(idAndText):
+	idTextList = json.JSONDecoder().decode(idAndText)
+
 	pid = str(os.getpid())+"_"+str(random.randint(1,10000))
-	filename = "/tmp/"+pid+".tmp"
-	text = text.replace("\r\n", " ")
-	text = text.replace("\n", " ")
-	sentences = tokenizers.tokenize(text)
-	fout = open(filename, "w")
-	#with open("/tmp/"+pid+".tmp", "w") as fout:
-	for s in sentences:
-		fout.write(s)
-		fout.write("\n")
-	fout.write("="*10)
-	fout.close()
-	#cwd = os.getcwd()
+	filename = os.path.join(TMP, pid+".tmp")
 	
-	cmd2 = "cat "+filename+" | sh "+os.path.join(SEGMENT_PATH, "segment")
-	ps = subprocess.Popen(cmd2,shell=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
-	try:
-		boundary = eval(ps.communicate()[0])
-		#print boundary
-	except:
-			os.remove(filename) 
-			return calculateSentenceRating(sentences, "other")
-	bStart = 0
 	newText = []
-	for b in boundary:
-		newText.append(" ".join(sentences[bStart:int(b)]))
-		#newText += "\n"
-		bStart = b
-	os.remove(filename)
-	return calculateSentenceRating(newText, "other")
+	segUidPair = []
 
-def summaryEntryToDB(text):
+	for idText in idTextList:
+		for uid, text in idText.iteritems():
+			  
+			text = text.replace("\r\n", " ")
+			text = text.replace("\n", " ")
+			sentences = tokenizers.tokenize(text)
+			fout = open(filename, "w")
+			#with open("/tmp/"+pid+".tmp", "w") as fout:
 
-	return normalSummary(text)
+			if len(sentences) <= 6: # if less than N sentences, no need to do segmentation; N is set as 6 for now.
+				newText.append(text)
+				segUidPair.append(uid)
+				continue
+			for s in sentences:
+				fout.write(s)
+				fout.write("\n")
+			fout.write("="*10)
+			fout.close()
+			#cwd = os.getcwd()
+			
+			cmd2 = "cat "+filename+" | sh "+os.path.join(SEGMENT_PATH, "segment")
+			ps = subprocess.Popen(cmd2,shell=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+			try:
+				boundary = eval(ps.communicate()[0])
+				#print boundary
+			except:
+				os.remove(filename) 
+				#return calculateSentenceRating(sentences, "other")
+				
+				newText.append(text)
+				segUidPair.append(uid)
+				continue	
+				
+
+			bStart = 0
+			#newText = []
+			for b in boundary:
+				newText.append(" ".join(sentences[bStart:int(b)]))
+				segUidPair.append(uid)
+				#newText += "\n"
+				bStart = b
+
+			os.remove(filename)
+	"""
+	end for loop
+	"""
+	#os.remove(filename)
+	return calculateSentenceRating(newText, segUidPair, "other")
+
+def summaryEntryToDB(uidTextDict):
+	#uidTextDict
+
+	return normalSummary(uidTextDict)
 
 
 if __name__ == "__main__":
-	summaryEntryToDB("")
+	#MultiPost input : {"uuid1":content, "uuid2":content, "uuid3":content}
+	
+	summaryEntryToDB("[{}]")
 	

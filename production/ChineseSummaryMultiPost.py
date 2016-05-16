@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 # process : 分句(標點符號)-> 分詞(jieba) -> segmentation(vseg) -> sum_ch.py (還要n-gram嗎?)
-# usage : result = summaryToDBCH(text) 
-# version '160513 return result in json [{sentence, sentence_pos, sentence_ranking}], sorted by ranking
+# usage : result = summaryToDBCH(textJsonString) 
+# version: '160516 MultiUser/MultiPost, input is json string [{id:1, content:1}, {id:2, content:2}], post id has to remembered and kept in the structure
 import sys, os, re
 import subprocess
 import jieba
@@ -11,6 +11,7 @@ import random
 import json
 
 SEGMENT_PATH = "."
+TMP = "/tmp/"
 
 
 def load_CHstop_words(stop_word_file):
@@ -73,7 +74,7 @@ def generate_CHsentences_rating(sentenceKeywordList, phraseScore, NE = 0, ABBR =
 	return sentenceRating				
 
 
-def calculateCHSentenceRating(text, origText, inputType, NE = 0, ABBR = 0, CIT = 0):
+def calculateCHSentenceRating(text, origText, textId, inputType, NE = 0, ABBR = 0, CIT = 0):
 	
 	#sentenceList = text.splitlines()
 	#text is segmented sentence array, origText is the orig sentence array
@@ -86,7 +87,7 @@ def calculateCHSentenceRating(text, origText, inputType, NE = 0, ABBR = 0, CIT =
 	sentenceRating = generate_CHsentences_rating(sentenceKeywordList, phraseScore)
 	
 	rate = lambda s : sentenceRating[s]
-	newSentences = [{"sentence":origText[o].encode("utf-8"), "position":o, "ranking":rate(s)} for o, s in enumerate(sentenceList)]
+	newSentences = [{"sentence":origText[o].encode("utf-8"), "position":o, "ranking":rate(s), "id":textId[o]} for o, s in enumerate(sentenceList)]
 	#newSentences = [{"sentence":s, "position":o, "ranking":rate(s)} for o, s in enumerate(sentenceList)] this fails if the text contains both English and Chinese, whose delimiter is not a space.
 		
 	#return json.JSONEncoder().encode(newSentences)
@@ -122,8 +123,9 @@ def noGetSortedSentencesCH(text, threshold=1):#threshold value range is from 1~1
 	return "\n\n".join(newSentenceList)
 
 def toSplitSentences(text):
-	#print text
-	sentences = re.split(u'([。；！？])', text)
+	
+	text = re.sub(ur"([\W])\. ?([\W])", ur"\1。\2", text)#add '160516 works for sentence like "3.1415928我聽到一個消息.是個好消息唷!" => "3.1415928我聽到一個消息。是個好消息唷!"
+	sentences = re.split(u'([。；！？!?;])', text)
 	return sentences
 
 def tokenize(sentence):
@@ -142,8 +144,8 @@ def segmentUI(filename, pid):
 		(segFile, textFile) = outtmp[0].split()
 	except:
 		#print "text size is too big!"
-		os.remove("/tmp/Seg."+pid+".seg")
-		os.remove("/tmp/Seg."+pid+".txt")
+		os.remove(TMP+"Seg."+pid+".seg")
+		os.remove(TMP+"Seg."+pid+".txt")
 		return [], []
 	#modify seg-comb to get boundary and segGroup 0701
 	seg = open(segFile, "r").read()
@@ -190,30 +192,6 @@ def segmentUI(filename, pid):
 	os.remove(textFile)
 	return segGroup, boundary
 
-def segmentBayesseg(filename):
-	#print filename
-	#cwd = os.getcwd()
-	#os.chdir(SEGMENT_PATH)	
-	cmd2 = "cat "+filename+ " | sh "+os.path.join(SEGMENT_PATH, "segment")
-	ps = subprocess.Popen(cmd2,shell=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
-
-	boundary = eval(ps.communicate()[0])
-	#print boundary
-	bStart = 0
-	segGroup = []
-	sentences = open(filename, "r").read().splitlines()
-	if sentences[-1] =="="*10: #this check is for Chinese only
-		sentences[-1] = ""
-	for b in boundary:
-		segGroup.append(" ".join(sentences[bStart:int(b)]))
-		#newText += "\n"
-		bStart = int(b)
-	#for sid, s in enumerate(segGroup):
-	#	print sid, s
-	#os.chdir(cwd)
-	#return segGroup 
-	return segGroup, boundary
-
 
 def getTokenizedText(text):
 	sentences = toSplitSentences(text)
@@ -227,44 +205,77 @@ def getTokenizedText(text):
 
 	return newTkSentences, newSentences
 
-def summaryToDBCH(text):
+def summaryToDBCH(idAndText):
+	
+	idTextList = json.JSONDecoder().decode(idAndText)
 	pid = str(os.getpid())+"_"+str(random.randint(1,10000))
-	text = text.decode("unicode-escape")
-	text = text.replace("\r\n", " ")
-	text = text.replace("\n", " ")
-	try:
-		(tokenizedSentences, splitSentences) = getTokenizedText(text)
-	except:
-		with open("./log/"+pid+".err", "w") as f:
-			f.write(text.encode("utf-8"))
-		reload(jieba)
-		return "null"
-	#filename = "tmp.txt"
-	filename = os.path.join("/tmp", pid+".tmp")
-	with open(filename, "w") as ftmp:
-		for sentence in tokenizedSentences:
-			
-			ftmp.write(sentence.encode("utf-8")) # this is important, make Segmentation work for Chinese!
-			# \n works on Linux but not on windows. Seems \r\n works for both(?)
-			ftmp.write("\n")
-		ftmp.write("="*10)
-	ftmp.close()
-	#(segGroup, boundary) = segmentBayesseg(filename) #Bayesseg code does not work in Chinese since it map words to its built-in dictionary 0617
-	(segGroup, boundary) = segmentUI(filename, pid)
-	if segGroup == [] and boundary == []:
-		
-		os.remove(filename)
-		return calculateCHSentenceRating(tokenizedSentences, splitSentences, None)
-	#create corresponding segments composed by untokenized sentences
-	bStart = 0
-	origSegGroup = []
-	for b in boundary:
-		origSegGroup.append(" ".join(splitSentences[bStart:int(b)]))
-		#newText += "\n"
-		bStart = int(b)
 
-	os.remove(filename)
-	return calculateCHSentenceRating(segGroup, origSegGroup, None)
+	filename = os.path.join(TMP, pid+".tmp")
+	addedSegGroup = []
+	origSegGroup = []
+	segUidPair = []
+
+	for idText in idTextList:
+		for uid, text in idText.iteritems():
+		
+			text = text.decode("unicode-escape")
+			text = text.replace("\r\n", " ")
+			text = text.replace("\n", " ")
+			try:
+				(tokenizedSentences, splitSentences) = getTokenizedText(text)
+			except:
+				with open("./log/"+pid+".err", "w") as f:
+					f.write(text.encode("utf-8"))
+				reload(jieba)
+				return "null"
+			#filename = os.path.join("/tmp", pid+".tmp")
+
+			if len(splitSentences) <= 6:
+				addedSegGroup.append(" ".join(tokenizedSentences))
+				origSegGroup.append(text) # text or " ".join(splitSetences)
+				segUidPair.append(uid)
+				continue
+
+			with open(filename, "w") as ftmp:
+				for sentence in tokenizedSentences:
+					
+					ftmp.write(sentence.encode("utf-8")) # this is important, make Segmentation work for Chinese!
+					# \n works on Linux but not on windows. Seems \r\n works for both(?)
+					ftmp.write("\n")
+				ftmp.write("="*10)
+			ftmp.close()
+			
+			(segGroup, boundary) = segmentUI(filename, pid)
+			if segGroup == [] and boundary == []:
+				
+				os.remove(filename)
+				#return calculateCHSentenceRating(tokenizedSentences, splitSentences, None)
+				addedSegGroup.append(" ".join(tokenizedSentences))
+				origSegGroup.append(text) # text or " ".join(splitSetences)
+				segUidPair.append(uid)
+				continue
+
+
+
+			#create corresponding segments composed by untokenized sentences
+			addedSegGroup += segGroup
+
+			bStart = 0
+			#origSegGroup = []
+			for b in boundary:
+				origSegGroup.append(" ".join(splitSentences[bStart:int(b)]))
+				#newText += "\n"
+				segUidPair.append(uid)
+				bStart = int(b)
+			
+			os.remove(filename)
+	"""	
+	for loop ends here
+	"""
+	#os.remove(filename)
+	return calculateCHSentenceRating(addedSegGroup, origSegGroup, segUidPair, None)
 
 if __name__=="__main__":
-	summaryToDBCH("")
+	#MultiPost input:{"uuid1":content, "uuid2":content}
+	
+	summaryToDBCH("[{}]")
